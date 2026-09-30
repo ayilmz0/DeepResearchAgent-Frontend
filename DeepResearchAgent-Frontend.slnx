@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="DeepResearchAgent-Frontend/deepresearchagent-frontend.esproj">
+    <Build />
+    <Deploy />
+  </Project>
+</Solution>
