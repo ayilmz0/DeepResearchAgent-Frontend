@@ -1,15 +1,34 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { createResearch } from "../services/researchService";
 
 function Home() {
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const navigate = useNavigate();
 
-  const handleStartResearch = () => {
-    console.log("Research query:", query);
+  const handleStartResearch = async () => {
+    if (!query.trim()) {
+      return;
+    }
 
-    navigate("/research/1");
+    try {
+      setLoading(true);
+      setError("");
+
+      const result = await createResearch({
+        query: query.trim(),
+      });
+
+      navigate(`/research/${result.id}`);
+    } catch (error) {
+      console.error(error);
+      setError("Research başlatılırken bir hata oluştu.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -34,11 +53,13 @@ function Home() {
             rows={6}
           />
 
+          {error && <p>{error}</p>}
+
           <button
             onClick={handleStartResearch}
-            disabled={!query.trim()}
+            disabled={!query.trim() || loading}
           >
-            Start Research
+            {loading ? "Starting..." : "Start Research"}
           </button>
         </div>
       </section>
