@@ -17,6 +17,14 @@ export interface GetResearchResponse {
   completedAt: string | null;
 }
 
+export interface GetReportResponse {
+  id: string;
+  researchId: string;
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
 export async function createResearch(
   request: CreateResearchRequest
 ): Promise<CreateResearchResponse> {
@@ -47,3 +55,16 @@ export async function getResearchById(
   return response.json();
 }
 
+export async function getResearchReport(
+  researchId: string
+): Promise<GetReportResponse> {
+  const response = await fetch(
+    `${API_URL}/${researchId}/report`
+  );
+
+  if (!response.ok) {
+    throw new Error("Research report alınamadı.");
+  }
+
+  return response.json();
+}
