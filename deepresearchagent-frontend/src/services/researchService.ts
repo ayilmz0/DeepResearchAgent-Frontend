@@ -1,3 +1,4 @@
+
 const API_URL = "http://localhost:5091/api/research";
 
 export interface CreateResearchRequest {
@@ -46,7 +47,7 @@ export async function createResearch(
 export async function getResearchById(
   id: string
 ): Promise<GetResearchResponse> {
-  const response = await fetch(`${API_URL}/${id}`);
+  const response = await fetch(`${API_URL}/${encodeURIComponent(id)}`);
 
   if (!response.ok) {
     throw new Error("Research bulunamadı.");
@@ -59,7 +60,7 @@ export async function getResearchReport(
   researchId: string
 ): Promise<GetReportResponse> {
   const response = await fetch(
-    `${API_URL}/${researchId}/report`
+    `${API_URL}/${encodeURIComponent(researchId)}/report`
   );
 
   if (!response.ok) {
