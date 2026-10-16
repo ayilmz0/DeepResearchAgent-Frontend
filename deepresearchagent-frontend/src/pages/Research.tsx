@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
 
+import { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
 import {
   getResearchById,
+  getResearchReport,
   type GetResearchResponse,
+  type GetReportResponse,
 } from "../services/researchService";
+import "./research.css";
 
-const researchStatuses = [
+const statuses = [
   "Planning",
   "Searching",
   "Crawling",
@@ -16,484 +19,388 @@ const researchStatuses = [
   "Completed",
 ];
 
-const statusLabels: Record<string, string> = {
-  Planning: "Planning Research",
-  Searching: "Searching Sources",
-  Crawling: "Analyzing Web Sources",
-  Analyzing: "Extracting Facts",
-  Verifying: "Verifying Evidence",
-  GeneratingReport: "Generating Report",
-  Completed: "Research Completed",
+const statusInfo: Record<string, { title: string; description: string }> = {
+  Planning: {
+    title: "Planning research",
+    description: "Creating a strategy and identifying relevant topics.",
+  },
+  Searching: {
+    title: "Searching the web",
+    description: "Finding relevant sources and collecting information.",
+  },
+  Crawling: {
+    title: "Collecting information",
+    description: "Reading sources and gathering research material.",
+  },
+  Analyzing: {
+    title: "Analyzing information",
+    description: "Extracting findings and identifying key insights.",
+  },
+  Verifying: {
+    title: "Verifying findings",
+    description: "Checking findings against the collected evidence.",
+  },
+  GeneratingReport: {
+    title: "Generating report",
+    description: "Preparing your final research report.",
+  },
+  Completed: {
+    title: "Research completed",
+    description: "Your research report is ready.",
+  },
+  Failed: {
+    title: "Research failed",
+    description: "An error occurred during the research process.",
+  },
 };
 
-const statusDescriptions: Record<string, string> = {
-  Planning:
-    "Creating an autonomous research strategy",
-  Searching:
-    "Finding relevant sources across the web",
-  Crawling:
-    "Reading and analyzing source content",
-  Analyzing:
-    "Extracting relevant facts and claims",
-  Verifying:
-    "Cross-checking evidence across sources",
-  GeneratingReport:
-    "Building your research report",
-  Completed:
-    "Your research is ready",
-};
+function getProgress(status: string): number {
+  if (status === "Completed") return 100;
 
-function Research() {
+  const index = statuses.indexOf(status);
+  if (index < 0) return 0;
+
+  return Math.round((index / (statuses.length - 1)) * 100);
+}
+
+export default function Research() {
   const { id } = useParams<{ id: string }>();
 
-  const [research, setResearch] =
-    useState<GetResearchResponse | null>(null);
-
+  const [research, setResearch] = useState<GetResearchResponse | null>(null);
   const [loading, setLoading] = useState(true);
-
   const [error, setError] = useState("");
 
+  const [report, setReport] = useState<GetReportResponse | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+
   useEffect(() => {
-    if (!id) {
-      return;
+  if (!id) {
+    return;
+  }
+
+  let cancelled = false;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const loadResearch = async () => {
+    try {
+      const result = await getResearchById(id);
+
+      if (cancelled) return;
+
+      setResearch(result);
+      setError("");
+      setLoading(false);
+
+      if (
+        result.status !== "Completed" &&
+        result.status !== "Failed"
+      ) {
+        timeoutId = setTimeout(loadResearch, 2000);
+      }
+    } catch (err) {
+      if (cancelled) return;
+
+      console.error("Research yüklenemedi:", err);
+      setError("Research bilgileri alınamadı.");
+      setLoading(false);
     }
+  };
+
+  void loadResearch();
+
+  return () => {
+    cancelled = true;
+
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  };
+}, [id]);
+
+  useEffect(() => {
+    if (!id || research?.status !== "Completed") return;
 
     let cancelled = false;
 
-    const loadResearch = async () => {
+    const loadReport = async () => {
       try {
-        const result =
-          await getResearchById(id);
+        setReportLoading(true);
+        setReportError("");
 
-        if (cancelled) {
-          return;
+        const result = await getResearchReport(id);
+        if (!cancelled) setReport(result);
+      } catch (err) {
+        console.error("Report yüklenemedi:", err);
+
+        if (!cancelled) {
+          setReportError(
+            "Rapor yüklenemedi. Sayfayı yenileyip tekrar deneyin."
+          );
         }
-
-        setResearch(result);
-        setLoading(false);
-
-        if (
-          result.status === "Completed" ||
-          result.status === "Failed"
-        ) {
-          return;
-        }
-
-        setTimeout(loadResearch, 2000);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        console.error(error);
-
-        setError(
-          "Research bilgileri alınamadı."
-        );
-
-        setLoading(false);
+      } finally {
+        if (!cancelled) setReportLoading(false);
       }
     };
 
-    loadResearch();
+    void loadReport();
 
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, research?.status]);
 
-  if (!id) {
-    return (
-      <main className="state-page">
-        <div className="state-card">
-          <div className="state-icon">?</div>
+  const handleCopyReport = async () => {
+    if (!report?.content) return;
 
-          <h1>Research Not Found</h1>
-
-          <p>
-            Research ID bulunamadı.
-          </p>
-        </div>
-      </main>
-    );
-  }
+    try {
+      await navigator.clipboard.writeText(report.content);
+      setCopyMessage("Rapor başarıyla kopyalandı.");
+      setReportError("");
+    } catch (err) {
+      console.error("Rapor kopyalanamadı:", err);
+      setCopyMessage("");
+      setReportError("Rapor kopyalanamadı. Tarayıcı izinlerini kontrol edin.");
+    }
+  };
 
   if (loading) {
     return (
-      <main className="state-page">
-        <div className="loading-orb">
-          <span />
+      <main className="research-state-page">
+        <div className="research-state-card">
+          <div className="loading-spinner" />
+          <h2>Loading research...</h2>
+          <p>Research bilgileri yükleniyor.</p>
         </div>
-
-        <h1>Loading Research</h1>
-
-        <p>
-          Connecting to the research engine...
-        </p>
       </main>
     );
   }
 
-  if (error) {
+  if (error || !research) {
     return (
-      <main className="state-page">
-        <div className="state-card error-card">
-
-          <div className="state-icon">
-            !
-          </div>
-
-          <h1>
-            Something went wrong
-          </h1>
-
-          <p>{error}</p>
-
+      <main className="research-state-page">
+        <div className="research-state-card">
+          <div className="state-icon state-icon-error">!</div>
+          <h2>Something went wrong</h2>
+          <p>{error || "Research bulunamadı."}</p>
+          <button className="start-button" onClick={() => window.location.reload()}>
+            Try Again
+          </button>
+          <p><Link to="/">Back to home</Link></p>
         </div>
       </main>
     );
   }
 
-  if (!research) {
-    return (
-      <main className="state-page">
-        <div className="state-card">
-
-          <div className="state-icon">
-            ?
-          </div>
-
-          <h1>
-            Research Not Found
-          </h1>
-
-          <p>
-            Research bulunamadı.
-          </p>
-
-        </div>
-      </main>
-    );
-  }
-
-  const currentStatusIndex =
-    researchStatuses.indexOf(
-      research.status
-    );
-
-  const isFailed =
-    research.status === "Failed";
-
-  const progressPercentage =
-    research.status === "Completed"
-      ? 100
-      : Math.max(
-          5,
-          ((currentStatusIndex + 1) /
-            researchStatuses.length) *
-            100
-        );
+  const progress = getProgress(research.status);
+  const currentStatus = statusInfo[research.status] ?? {
+    title: research.status,
+    description: "Research is being processed.",
+  };
 
   return (
     <main className="research-page">
+      <nav className="research-nav">
+        <Link to="/" className="brand">
+          <span className="brand-icon">✦</span>
+          <span>DeepResearch<span className="brand-accent">Agent</span></span>
+        </Link>
 
-      <div className="research-background-glow" />
-
-      <nav className="research-navbar">
-
-        <div className="brand">
-
-          <div className="brand-icon">
-            ✦
-          </div>
-
-          <span>
-            Deep<span>Research</span>
-          </span>
-
-        </div>
-
-        <div className="research-id">
-          Research ID:
-          <span>
-            {research.id.substring(0, 8)}...
-          </span>
-        </div>
-
+        <span className="nav-status">
+          <span className={`status-dot ${research.status === "Completed" ? "status-dot-complete" : research.status === "Failed" ? "status-dot-error" : ""}`} />
+          {research.status === "Completed"
+            ? "Completed"
+            : research.status === "Failed"
+              ? "Failed"
+              : "Research in progress"}
+        </span>
       </nav>
 
-      <section className="research-main">
+      <div className="research-container">
+        <header className="research-heading">
+          <span className="eyebrow">AUTONOMOUS RESEARCH</span>
+          <h1>Your research journey</h1>
+          <p>Follow your AI agent as it explores, analyzes, and verifies information.</p>
+        </header>
 
-        <div className="research-top">
-
-          <div>
-
-            <div className="live-badge">
-              <span className="pulse-dot" />
-
-              {isFailed
-                ? "Research Failed"
-                : research.status ===
-                  "Completed"
-                ? "Research Complete"
-                : "Research In Progress"}
-            </div>
-
-            <h1>
-              {research.query}
-            </h1>
-
+        <section className="research-query-card">
+          <div className="query-card-top">
+            <span className="query-label">YOUR RESEARCH QUERY</span>
+            <span className="query-id">ID: {research.id}</span>
           </div>
+          <h2>{research.query}</h2>
+        </section>
 
-          <div className="progress-circle">
-
-            <svg
-              viewBox="0 0 100 100"
-            >
-              <circle
-                className="circle-background"
-                cx="50"
-                cy="50"
-                r="42"
-              />
-
-              <circle
-                className="circle-progress"
-                cx="50"
-                cy="50"
-                r="42"
-                style={{
-                  strokeDashoffset:
-                    264 -
-                    (264 *
-                      progressPercentage) /
-                      100,
-                }}
-              />
-            </svg>
-
-            <div className="progress-number">
-              {Math.round(
-                progressPercentage
-              )}
-              <span>%</span>
-            </div>
-
-          </div>
-
-        </div>
-
-        <section className="progress-card">
-
-          <div className="section-heading">
-
+        {research.status === "Failed" ? (
+          <section className="research-failed-card">
+            <div className="state-icon state-icon-error">!</div>
             <div>
-              <span>
-                RESEARCH ENGINE
-              </span>
-
-              <h2>
-                Research Progress
-              </h2>
+              <h2>Research could not be completed</h2>
+              <p>The research process encountered an error. Check the backend logs for details.</p>
             </div>
-
-            {!isFailed &&
-              research.status !==
-                "Completed" && (
-                <div className="live-indicator">
-                  <span />
-                  LIVE
+            <button className="start-button" onClick={() => window.location.reload()}>
+              Refresh
+            </button>
+          </section>
+        ) : (
+          <>
+            <section className="progress-card">
+              <div className="progress-main">
+                <div className="progress-copy">
+                  <span className="eyebrow">CURRENT STATUS</span>
+                  <h2>{currentStatus.title}</h2>
+                  <p>{currentStatus.description}</p>
                 </div>
-              )}
 
-          </div>
-
-          {isFailed ? (
-            <div className="failed-box">
-
-              <div className="failed-icon">
-                !
+                <div
+                  className="progress-circle"
+                  style={{ "--progress": `${progress}%` } as React.CSSProperties}
+                  role="img"
+                  aria-label={`Research progress: ${progress}%`}
+                >
+                  <div className="progress-circle-inner">
+                    <strong>{progress}%</strong>
+                    <span>complete</span>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <h3>
-                  Research failed
-                </h3>
-
-                <p>
-                  The research process could
-                  not be completed.
-                </p>
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div className="progress-fill" style={{ width: `${progress}%` }} />
               </div>
 
-            </div>
-          ) : (
-            <div className="timeline">
+              <div className="progress-footer">
+                <span>{research.status === "Completed" ? "All stages completed" : "Research runs automatically"}</span>
+                {research.completedAt && (
+                  <span>Completed {new Date(research.completedAt).toLocaleString()}</span>
+                )}
+              </div>
+            </section>
 
-              {researchStatuses.map(
-                (status, index) => {
+            <section className="timeline-section">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">WORKFLOW</span>
+                  <h2>Research stages</h2>
+                </div>
+                <span className="stage-count">
+                  {research.status === "Completed"
+                    ? "7 / 7 stages"
+                    : `${Math.max(statuses.indexOf(research.status) + 1, 0)} / 7 stages`}
+                </span>
+              </div>
 
-                  const isCompleted =
-                    index <
-                    currentStatusIndex;
-
-                  const isCurrent =
-                    index ===
-                    currentStatusIndex;
+              <div className="timeline">
+                {statuses.map((status, index) => {
+                  const currentIndex = statuses.indexOf(research.status);
+                  const completed =
+                    research.status === "Completed" || index < currentIndex;
+                  const active =
+                    status === research.status && research.status !== "Completed";
+                  const details = statusInfo[status];
 
                   return (
                     <div
+                      className={`timeline-item ${completed ? "is-completed" : ""} ${active ? "is-active" : ""}`}
                       key={status}
-                      className={`timeline-item ${
-                        isCompleted
-                          ? "completed"
-                          : isCurrent
-                            ? "current"
-                            : "pending"
-                      }`}
                     >
-
-                      <div className="timeline-line" />
-
-                      <div className="timeline-node">
-
-                        {isCompleted
-                          ? "✓"
-                          : isCurrent
-                            ? ""
-                            : index + 1}
-
+                      <div className="timeline-marker">
+                        {completed ? "✓" : active ? <span className="timeline-active-dot" /> : index + 1}
                       </div>
 
                       <div className="timeline-content">
-
-                        <div className="timeline-title">
-                          <strong>
-                            {statusLabels[
-                              status
-                            ]}
-                          </strong>
-
-                          {isCurrent && (
-                            <span className="working-badge">
-                              WORKING
-                            </span>
-                          )}
-
+                        <div className="timeline-title-row">
+                          <h3>{details.title}</h3>
+                          {completed && <span className="timeline-badge">Completed</span>}
+                          {active && <span className="timeline-badge timeline-badge-active">In progress</span>}
                         </div>
-
-                        <p>
-                          {
-                            statusDescriptions[
-                              status
-                            ]
-                          }
-                        </p>
-
+                        <p>{details.description}</p>
                       </div>
-
                     </div>
                   );
-                }
-              )}
+                })}
+              </div>
+            </section>
 
-            </div>
-          )}
+            <section className="research-details-grid">
+              <article className="detail-card">
+                <span className="detail-icon">◷</span>
+                <div>
+                  <span className="detail-label">CREATED AT</span>
+                  <strong>{new Date(research.createdAt).toLocaleString()}</strong>
+                </div>
+              </article>
 
-        </section>
+              <article className="detail-card">
+                <span className="detail-icon">▶</span>
+                <div>
+                  <span className="detail-label">STARTED AT</span>
+                  <strong>{research.startedAt ? new Date(research.startedAt).toLocaleString() : "Waiting to start"}</strong>
+                </div>
+              </article>
 
-        <section className="details-grid">
+              <article className="detail-card">
+                <span className="detail-icon">✓</span>
+                <div>
+                  <span className="detail-label">COMPLETED AT</span>
+                  <strong>{research.completedAt ? new Date(research.completedAt).toLocaleString() : "In progress"}</strong>
+                </div>
+              </article>
+            </section>
 
-          <div className="info-card">
+            {research.status === "Completed" && (
+              <section className="report-card">
+                <div className="report-header">
+                  <div className="report-placeholder-icon">✦</div>
+                  <div>
+                    <span className="eyebrow">RESEARCH REPORT</span>
+                    <h2>{report?.title ?? "Your research report"}</h2>
+                    {report && <p>Created at {new Date(report.createdAt).toLocaleString()}</p>}
+                  </div>
+                </div>
 
-            <div className="info-card-icon">
-              ◷
-            </div>
+                {reportLoading && (
+                  <div className="report-message">
+                    <div className="loading-spinner" />
+                    <span>Loading your research report...</span>
+                  </div>
+                )}
 
-            <div>
-              <span>
-                CREATED
-              </span>
+                {reportError && <p className="report-error">{reportError}</p>}
 
-              <strong>
-                {new Date(
-                  research.createdAt
-                ).toLocaleString()}
-              </strong>
-            </div>
+                {!reportLoading && report && (
+                  <>
+                    <div className="report-content">{report.content}</div>
+                    <div className="report-actions">
+                      <button className="start-button" onClick={() => void handleCopyReport()}>
+                        Copy Report <span>⧉</span>
+                      </button>
+                      {copyMessage && <span className="copy-success">{copyMessage}</span>}
+                    </div>
+                  </>
+                )}
 
-          </div>
-
-          <div className="info-card">
-
-            <div className="info-card-icon">
-              ◉
-            </div>
-
-            <div>
-              <span>
-                STATUS
-              </span>
-
-              <strong>
-                {statusLabels[
-                  research.status
-                ] ?? research.status}
-              </strong>
-            </div>
-
-          </div>
-
-          <div className="info-card">
-
-            <div className="info-card-icon">
-              ⚡
-            </div>
-
-            <div>
-              <span>
-                ENGINE
-              </span>
-
-              <strong>
-                Deep Research Agent
-              </strong>
-            </div>
-
-          </div>
-
-        </section>
-
-        {research.status ===
-          "Completed" && (
-          <section className="report-placeholder">
-
-            <div className="report-placeholder-icon">
-              ✦
-            </div>
-
-            <div>
-              <span>
-                RESEARCH COMPLETE
-              </span>
-
-              <h2>
-                Your research is ready
-              </h2>
-
-              <p>
-                The research engine has finished
-                analyzing the available evidence.
-              </p>
-            </div>
-
-          </section>
+                {!reportLoading && !report && !reportError && (
+                  <p className="report-message">Waiting for the report to become available.</p>
+                )}
+              </section>
+            )}
+          </>
         )}
 
-      </section>
-
+        <footer className="research-footer">
+          <Link to="/">← Back to home</Link>
+          <span>Powered by DeepResearchAgent</span>
+        </footer>
+      </div>
     </main>
   );
 }
 
-export default Research;
